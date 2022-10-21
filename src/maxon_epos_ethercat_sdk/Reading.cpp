@@ -97,7 +97,7 @@ double Reading::getActualPosition() const {
 }
 double Reading::getActualVelocity() const {
   return static_cast<double>(actualVelocity_) *
-         velocityFactorMicroRPMToRadPerSec_;
+         velocityFactorMilliRPMToRadPerSec_;
 }
 double Reading::getActualCurrent() const {
   return static_cast<double>(actualCurrent_) * currentFactorIntegerToAmp_;

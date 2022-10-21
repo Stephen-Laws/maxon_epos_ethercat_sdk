@@ -717,106 +717,140 @@ bool Maxon::configParam() {
   uint32_t velocityPGain;
   uint32_t velocityIGain;
 
-  // Set velocity unit to micro revs per minute
+  // Set velocity unit to Milli revs per minute
   uint32_t velocity_unit;
-  velocity_unit = 0xFAB44700;
+  velocity_unit = OD_INDEX_VELOCITY_UNIT_MILLI_rpm;
+  uint16_t velocity_exponent = 3;
+ 
   configSuccess &=
       sdoVerifyWrite(OD_INDEX_SI_UNIT_VELOCITY, 0x00, false, velocity_unit,
                      configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Velocity Units set to:                        10E-" << velocity_exponent << " rpm.");
 
   maxMotorSpeed = static_cast<uint32_t>(configuration_.workVoltage *
                                         configuration_.speedConstant);
+
   configSuccess &=
       sdoVerifyWrite(OD_INDEX_MAX_MOTOR_SPEED, 0x00, false, maxMotorSpeed,
                      configuration_.configRunSdoVerifyTimeout);
-
+  MELO_INFO_STREAM("Max Motor Speed (rpm) set to:                 " << maxMotorSpeed);
+  
+  //Given in Velocity units, yaml is rpm 
   maxProfileVelocity = static_cast<uint32_t>(configuration_.maxProfileVelocity *
-                                             60.0 * 1e6 / (2 * M_PI));
+                                             pow(10,velocity_exponent) );
 
   configSuccess &= sdoVerifyWrite(OD_INDEX_MAX_PROFILE_VELOCITY, 0x00, false,
                                   maxProfileVelocity,
                                   configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Max Profile Velocity (velocity units) set to: " << maxProfileVelocity);  
 
   maxGearSpeed =
       static_cast<uint32_t>(maxMotorSpeed / configuration_.gearRatio);
   configSuccess &= sdoVerifyWrite(OD_INDEX_GEAR_DATA, 0x03, false, maxGearSpeed,
                                   configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Max Gear Speed (rpm) set to:                  " << maxGearSpeed);  
 
   configSuccess &= sdoVerifyWrite(OD_INDEX_SOFTWARE_POSITION_LIMIT, 0x01, false,
                                   configuration_.minPosition);
+  if(configuration_.minPosition ==0){
+    MELO_INFO_STREAM("Min position range limit (qc) is disabled");
+  }
+  else{
+    MELO_INFO_STREAM("Min position range limit (qc) is set to:    " << configuration_.minPosition);
+  }
 
   configSuccess &= sdoVerifyWrite(OD_INDEX_SOFTWARE_POSITION_LIMIT, 0x02, false,
                                   configuration_.maxPosition);
+  if(configuration_.minPosition ==0){
+    MELO_INFO_STREAM("Max position range limit (qc) is disabled");
+  }
+  else{
+    MELO_INFO_STREAM("Max position range limit (qc) is set to:    " << configuration_.minPosition);
+  }
 
   nominalCurrent =
       static_cast<uint32_t>(round(1000.0 * configuration_.nominalCurrentA));
   configSuccess &=
       sdoVerifyWrite(OD_INDEX_MOTOR_DATA, 0x01, false, nominalCurrent,
                      configuration_.configRunSdoVerifyTimeout);
-
+  MELO_INFO_STREAM("Nominal current (mA) set to:                  " << nominalCurrent);  
+ 
   maxCurrent =
       static_cast<uint32_t>(round(1000.0 * configuration_.maxCurrentA));
   configSuccess &= sdoVerifyWrite(OD_INDEX_MOTOR_DATA, 0x02, false, maxCurrent,
                                   configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Max current (mA) set to:                      " << nominalCurrent);  
+
 
   torqueConstant =
       static_cast<uint32_t>(1000000.0 * configuration_.torqueConstantNmA);
   configSuccess &=
       sdoVerifyWrite(OD_INDEX_MOTOR_DATA, 0x05, false, torqueConstant,
                      configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Torque constant (micro_Nm) set to:            " << torqueConstant);  
 
-  currentPGain = static_cast<uint32_t>(1000000 * configuration_.currentPGainSI);
+
+  currentPGain = static_cast<uint32_t>(1000 * configuration_.currentPGainSI);
   configSuccess &= sdoVerifyWrite(OD_INDEX_CURRENT_CONTROL_PARAM, 0x01, false,
                                   static_cast<uint32_t>(currentPGain),
                                   configuration_.configRunSdoVerifyTimeout);
 
-  currentIGain = static_cast<uint32_t>(1000 * configuration_.currentIGainSI);
+  currentIGain = static_cast<uint32_t>(1000*configuration_.currentIGainSI);
   configSuccess &= sdoVerifyWrite(OD_INDEX_CURRENT_CONTROL_PARAM, 0x02, false,
                                   static_cast<uint32_t>(currentIGain),
                                   configuration_.configRunSdoVerifyTimeout);
-
-  positionPGain =
-      static_cast<uint32_t>(1000000 * configuration_.positionPGainSI);
-  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x01, false,
-                                  static_cast<uint32_t>(positionPGain),
-                                  configuration_.configRunSdoVerifyTimeout);
-
-  positionIGain =
-      static_cast<uint32_t>(1000000 * configuration_.positionIGainSI);
-  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x02, false,
-                                  static_cast<uint32_t>(positionIGain),
-                                  configuration_.configRunSdoVerifyTimeout);
-
-  positionDGain =
-      static_cast<uint32_t>(1000000 * configuration_.positionDGainSI);
-  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x03, false,
-                                  static_cast<uint32_t>(positionDGain),
-                                  configuration_.configRunSdoVerifyTimeout);
-
-  configSuccess &= sdoVerifyWrite(OD_INDEX_QUICKSTOP_DECELERATION, 0x00, false,
-                                  configuration_.quickStopDecel,
-                                  configuration_.configRunSdoVerifyTimeout);
-
-  configSuccess &= sdoVerifyWrite(OD_INDEX_PROFILE_DECELERATION, 0x00, false,
-                                  configuration_.profileDecel,
-                                  configuration_.configRunSdoVerifyTimeout);
-
-  configSuccess &= sdoVerifyWrite(OD_INDEX_FOLLOW_ERROR_WINDOW, 0x00, false,
-                                  configuration_.followErrorWindow,
-                                  configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Current gains set to:          P (micro_V/A): " << currentPGain << " I (micro_V/(A*ms)): " << currentIGain);  
 
   velocityPGain =
-      static_cast<uint32_t>(1000000 * configuration_.velocityPGainSI);
+      static_cast<uint32_t>(1000 * configuration_.velocityPGainSI);
   configSuccess &= sdoVerifyWrite(OD_INDEX_VELOCITY_CONTROL_PARAM, 0x01, false,
                                   static_cast<uint32_t>(velocityPGain),
                                   configuration_.configRunSdoVerifyTimeout);
 
   velocityIGain =
-      static_cast<uint32_t>(1000000 * configuration_.velocityIGainSI);
+      static_cast<uint32_t>(1000 * configuration_.velocityIGainSI);
   configSuccess &= sdoVerifyWrite(OD_INDEX_VELOCITY_CONTROL_PARAM, 0x02, false,
                                   static_cast<uint32_t>(velocityIGain),
                                   configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Velocity gains set to:     P (micro_A*s/rad): " << velocityPGain << "\t I (micro_A/rad): " << velocityIGain);  
 
+
+  positionPGain =
+      static_cast<uint32_t>(1000 * configuration_.positionPGainSI);
+  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x01, false,
+                                  static_cast<uint32_t>(positionPGain),
+                                  configuration_.configRunSdoVerifyTimeout);
+
+  positionIGain =
+      static_cast<uint32_t>(1000 * configuration_.positionIGainSI);
+  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x02, false,
+                                  static_cast<uint32_t>(positionIGain),
+                                  configuration_.configRunSdoVerifyTimeout);
+
+  positionDGain =
+      static_cast<uint32_t>(1000 * configuration_.positionDGainSI);
+  configSuccess &= sdoVerifyWrite(OD_INDEX_POSITION_CONTROL_PARAM, 0x03, false,
+                                  static_cast<uint32_t>(positionDGain),
+                                  configuration_.configRunSdoVerifyTimeout);
+
+  MELO_INFO_STREAM("Position gains set to:       P (micro_A/rad): " << positionPGain << "\t I (micro_A/(rad*s)): " << positionIGain<< "\t D (micro_A*s/rad): " << positionDGain);  
+
+  configSuccess &= sdoVerifyWrite(OD_INDEX_QUICKSTOP_DECELERATION, 0x00, false,
+                                  configuration_.quickStopDecel,
+                                  configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Quickstop Deceleration (accel units) set to:  " << configuration_.quickStopDecel);
+
+  configSuccess &= sdoVerifyWrite(OD_INDEX_PROFILE_DECELERATION, 0x00, false,
+                                  configuration_.profileDecel,
+                                  configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Profile Deceleration (accel units) set to:    " << configuration_.profileDecel);
+
+  configSuccess &= sdoVerifyWrite(OD_INDEX_FOLLOW_ERROR_WINDOW, 0x00, false,
+                                  configuration_.followErrorWindow,
+                                  configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Follow Error Window Deceleration (qc) set to: " << configuration_.followErrorWindow);
+
+  
   if (configSuccess) {
     MELO_INFO("Setting configuration parameters succeeded.");
   } else {

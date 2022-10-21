@@ -33,6 +33,7 @@
 #include "maxon_epos_ethercat_sdk/Command.hpp"
 
 #include <iomanip>
+#include "message_logger/message_logger.hpp"
 
 namespace maxon {
 Command::Command(const Command& other) {
@@ -226,6 +227,7 @@ void Command::doUnitConversion() {
         static_cast<int16_t>(torqueFactorNmToInteger_ * torqueOffsetUU_);
     velocityOffset_ = static_cast<int32_t>(velocityFactorRadPerSecToMicroRPM_ *
                                            velocityOffsetUU_);
+    //MELO_INFO_STREAM("Pos: " << targetPosition_ << " Vel: " << targetVelocity_ << " Torque: " << targetTorque_);
   }
 }
 

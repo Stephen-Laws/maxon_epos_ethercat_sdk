@@ -76,38 +76,50 @@ Maxon::Maxon(const std::string& name, const uint32_t address) {
   name_ = name;
 }
 
+       
+
 bool Maxon::startup() {
   bool success = true;
-  success &= bus_->waitForState(EC_STATE_PRE_OP, address_, 50, 0.05);
-  // bus_->syncDistributedClock0(address_, true, timeStep_, timeStep_ / 2.f); //
+  success &= bus_->waitForState(EC_STATE_PRE_OP, address_, 10, 0.05);
+  //bus_->syncDistributedClock0(address_, true, timeStep_, timeStep_ / 2.f); //
   // Might not need
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   // use hardware motor rated current value if necessary
   // TODO test
+
   if (configuration_.nominalCurrentA == 0.0) {
+    MELO_INFO_STREAM("Nominal current too low to function, reading from EPOS4");
     uint32_t nominalCurrent;
-    success &= sendSdoRead(OD_INDEX_MOTOR_DATA, 0x02, false, nominalCurrent);
+    success &= sendSdoRead(OD_INDEX_MOTOR_DATA, 0x01, true, nominalCurrent);
     // update the configuration to accomodate the new motor
     // rated current value
     configuration_.nominalCurrentA =
         static_cast<double>(nominalCurrent) / 1000.0;
     // update the reading_ object to ensure correct unit conversion
     reading_.configureReading(configuration_);
-  }
-  // success &= setDriveStateViaSdo(DriveState::ReadyToSwitchOn);
+    MELO_INFO_STREAM("CURRENT: " << static_cast<double>(nominalCurrent) / 1000.0);  
 
+  }
+
+  success &= setDriveStateViaSdo(DriveState::ReadyToSwitchOn);
+  MELO_INFO_STREAM("Set Drive State Complete:         "<<success);
+  
+  
   // PDO mapping
   success &= mapPdos(rxPdoTypeEnum_, txPdoTypeEnum_);
+  MELO_INFO_STREAM("Mapping Pdos Complete:            "<<success);
 
+  
   // Set Interpolation
   success &= sdoVerifyWrite(OD_INDEX_INTERPOLATION_TIME_PERIOD, 0x01, false,
-                            static_cast<uint8_t>(0),
+                            static_cast<uint8_t>(2),
                             configuration_.configRunSdoVerifyTimeout);
-
+  
   success &= sdoVerifyWrite(OD_INDEX_INTERPOLATION_TIME_PERIOD, 0x02, false,
                             static_cast<int8_t>(-3),
                             configuration_.configRunSdoVerifyTimeout);
+  MELO_INFO_STREAM("Set Interpolation:                "<<success);
 
   // Set initial mode of operation
   success &=
@@ -115,11 +127,15 @@ bool Maxon::startup() {
                      static_cast<int8_t>(configuration_.modesOfOperation[0]),
                      configuration_.configRunSdoVerifyTimeout);
 
+  MELO_INFO_STREAM("Initial mode of operation:        " << success);
   // To be on the safe side: set currect PDO sizes
   autoConfigurePdoSizes();
+  MELO_INFO_STREAM("PDO Sizes configured.");
 
   // write the configuration parameters via Sdo
   success &= configParam();
+
+  MELO_INFO_STREAM("Configuration parameters written: " << success);
 
   if (!success) {
     MELO_ERROR_STREAM(
@@ -173,16 +189,13 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoCSP: {
       RxPdoCSP rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
-        rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
-        rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
+      rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
+      rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
+      rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
 
-        // Extra data
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
-      }
+      // Extra data
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -190,15 +203,12 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoCST: {
       RxPdoCST rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
-        rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
+      rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
+      rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
 
-        // Extra data
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
-      }
+      // Extra data
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -206,15 +216,12 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoCSV: {
       RxPdoCSV rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
-        rxPdo.velocityOffset_ = stagedCommand_.getVelocityOffsetRaw();
+      rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
+      rxPdo.velocityOffset_ = stagedCommand_.getVelocityOffsetRaw();
 
-        // Extra data
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
-      }
+      // Extra data
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -222,17 +229,14 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoCSTCSP: {
       RxPdoCSTCSP rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
-        rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
-        rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
-        rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
+      rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
+      rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
+      rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
+      rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
 
-        // Extra data
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
-      }
+      // Extra data
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -240,19 +244,16 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoCSTCSPCSV: {
       RxPdoCSTCSPCSV rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
-        rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
-        rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
-        rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
-        rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
-        rxPdo.velocityOffset_ = stagedCommand_.getVelocityOffsetRaw();
+      rxPdo.targetPosition_ = stagedCommand_.getTargetPositionRaw();
+      rxPdo.positionOffset_ = stagedCommand_.getPositionOffsetRaw();
+      rxPdo.targetTorque_ = stagedCommand_.getTargetTorqueRaw();
+      rxPdo.torqueOffset_ = stagedCommand_.getTorqueOffsetRaw();
+      rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
+      rxPdo.velocityOffset_ = stagedCommand_.getVelocityOffsetRaw();
 
-        // Extra data
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
-      }
+      // Extra data
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.modeOfOperation_ = static_cast<int8_t>(modeOfOperation_);
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -260,14 +261,11 @@ void Maxon::updateWrite() {
     }
     case RxPdoTypeEnum::RxPdoPVM: {
       RxPdoPVM rxPdo{};
-      {
-        std::lock_guard<std::recursive_mutex> lock(stagedCommandMutex_);
-        rxPdo.controlWord_ = controlword_.getRawControlword();
-        rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
-        rxPdo.profileAccel_ = stagedCommand_.getProfileAccelRaw();
-        rxPdo.profileDeccel_ = stagedCommand_.getProfileDeccelRaw();
-        rxPdo.motionProfileType_ = stagedCommand_.getMotionProfileType();
-      }
+      rxPdo.controlWord_ = controlword_.getRawControlword();
+      rxPdo.targetVelocity_ = stagedCommand_.getTargetVelocityRaw();
+      rxPdo.profileAccel_ = stagedCommand_.getProfileAccelRaw();
+      rxPdo.profileDeccel_ = stagedCommand_.getProfileDeccelRaw();
+      rxPdo.motionProfileType_ = stagedCommand_.getMotionProfileType();
 
       // actually writing to the hardware
       bus_->writeRxPdo(address_, rxPdo);
@@ -298,76 +296,59 @@ void Maxon::updateRead() {
       TxPdoCSP txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      { 
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setStatusword(txPdo.statusword_);
-        reading_.setActualCurrent(txPdo.actualTorque_);
-        reading_.setActualVelocity(txPdo.actualVelocity_);
-        reading_.setActualPosition(txPdo.actualPosition_);
-      }
+      reading_.setStatusword(txPdo.statusword_);
+      reading_.setActualCurrent(txPdo.actualTorque_);
+      reading_.setActualVelocity(txPdo.actualVelocity_);
+      reading_.setActualPosition(txPdo.actualPosition_);
       break;
     }
     case TxPdoTypeEnum::TxPdoCST: {
       TxPdoCST txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      {
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setStatusword(txPdo.statusword_);
-        reading_.setActualCurrent(txPdo.actualTorque_);
-        reading_.setActualVelocity(txPdo.actualVelocity_);
-        reading_.setActualPosition(txPdo.actualPosition_);
-      }
+      reading_.setStatusword(txPdo.statusword_);
+      reading_.setActualCurrent(txPdo.actualTorque_);
+      reading_.setActualVelocity(txPdo.actualVelocity_);
+      reading_.setActualPosition(txPdo.actualPosition_);
       break;
     }
     case TxPdoTypeEnum::TxPdoCSV: {
       TxPdoCSV txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      {
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setStatusword(txPdo.statusword_);
-        reading_.setActualCurrent(txPdo.actualTorque_);
-        reading_.setActualVelocity(txPdo.actualVelocity_);
-        reading_.setActualPosition(txPdo.actualPosition_);
-      }
+      reading_.setStatusword(txPdo.statusword_);
+      reading_.setActualCurrent(txPdo.actualTorque_);
+      reading_.setActualVelocity(txPdo.actualVelocity_);
+      reading_.setActualPosition(txPdo.actualPosition_);
       break;
     }
     case TxPdoTypeEnum::TxPdoCSTCSP: {
       TxPdoCSTCSP txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      {
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setStatusword(txPdo.statusword_);
-        reading_.setActualCurrent(txPdo.actualTorque_);
-        reading_.setActualVelocity(txPdo.actualVelocity_);
-        reading_.setActualPosition(txPdo.actualPosition_);
-      }
+      reading_.setStatusword(txPdo.statusword_);
+      reading_.setActualCurrent(txPdo.actualTorque_);
+      reading_.setActualVelocity(txPdo.actualVelocity_);
+      reading_.setActualPosition(txPdo.actualPosition_);
       break;
     }
     case TxPdoTypeEnum::TxPdoCSTCSPCSV: {
       TxPdoCSTCSPCSV txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      {
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setStatusword(txPdo.statusword_);
-        reading_.setActualCurrent(txPdo.actualTorque_);
-        reading_.setActualVelocity(txPdo.actualVelocity_);
-        reading_.setActualPosition(txPdo.actualPosition_);
-      }
+      reading_.setStatusword(txPdo.statusword_);
+      reading_.setActualCurrent(txPdo.actualTorque_);
+      reading_.setActualVelocity(txPdo.actualVelocity_);
+      reading_.setActualPosition(txPdo.actualPosition_);
       break;
     }
     case TxPdoTypeEnum::TxPdoPVM: {
       TxPdoPVM txPdo{};
       // reading from the bus
       bus_->readTxPdo(address_, txPdo);
-      {
-        std::lock_guard<std::recursive_mutex> lock(readingMutex_);
-        reading_.setDemandVelocity(txPdo.demandVelocity_);
-        reading_.setStatusword(txPdo.statusword_);
-      }
+
+      reading_.setDemandVelocity(txPdo.demandVelocity_);
+      reading_.setStatusword(txPdo.statusword_);
       break;
     }
     default:
